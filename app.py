@@ -165,6 +165,7 @@ SIGNALS = {
     "counter":  ["clk", "rst_n", "count"],
     "fsm":      ["clk", "rst_n", "go", "state"],
     "shiftreg": ["clk", "din", "q1", "q2", "dout"],
+    "alu":      ["op", "a", "b", "y"],   # combinational — no clock
 }
 
 # ---------------------------------------------------------------------------
