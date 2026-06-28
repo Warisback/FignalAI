@@ -178,7 +178,7 @@ def render_waveform(
                 ax.plot([t1 - slant, t1], [1.0, 0.0], color=color, lw=1.0)
 
                 # print value label in the middle of the segment
-                if w > max_t * 0.04:  # only if wide enough to fit text
+                if w > max_t * 0.018:  # show values unless the segment is tiny
                     ax.text(
                         (t0 + t1) / 2, 0.52, label,
                         ha="center", va="center",

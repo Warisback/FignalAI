@@ -149,6 +149,8 @@ if "tps"        not in st.session_state: st.session_state.tps       = None
 if "total_cycle_ms" not in st.session_state: st.session_state.total_cycle_ms = None
 if "baseline_measured" not in st.session_state: st.session_state.baseline_measured = False
 if "png"        not in st.session_state: st.session_state.png       = None
+if "before_png" not in st.session_state: st.session_state.before_png = None
+if "fixed_png"  not in st.session_state: st.session_state.fixed_png  = None
 if "sim_result" not in st.session_state: st.session_state.sim_result = None
 if "diff"       not in st.session_state: st.session_state.diff      = None
 if "console"    not in st.session_state: st.session_state.console   = ""
@@ -277,6 +279,24 @@ console_placeholder = console_col.empty()
 
 def render_waveform_panel():
     with wave_placeholder.container(border=True):
+        before = st.session_state.before_png
+        fixed  = st.session_state.fixed_png
+
+        # once fixed, show the before/after comparison (proof of the fix)
+        if fixed and pathlib.Path(fixed).exists():
+            st.markdown(
+                '<div class="panel-hdr"><span class="panel-label">Waveform · before → after</span>'
+                '<span class="badge-pass">● FIXED</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown('<span class="badge-fail">● before · RESULT: FAIL</span>', unsafe_allow_html=True)
+            if before and pathlib.Path(before).exists():
+                st.image(before, use_container_width=True)
+            st.markdown('<span class="badge-pass">● after · RESULT: PASS</span>', unsafe_allow_html=True)
+            st.image(fixed, use_container_width=True)
+            return
+
+        # live single view (during the run)
         if st.session_state.sim_result is None:
             badge = ""
         elif st.session_state.sim_result:
@@ -510,6 +530,8 @@ if run_clicked and selected and selected != "— no examples found —":
     # clear previous run state (incl. stats, so the cards flip to "•••" live)
     st.session_state.events      = []
     st.session_state.png         = None
+    st.session_state.before_png  = None
+    st.session_state.fixed_png   = None
     st.session_state.sim_result  = None
     st.session_state.diff        = None
     st.session_state.console     = ""
@@ -546,6 +568,11 @@ if run_clicked and selected and selected != "— no examples found —":
 
                 if event.kind == "render" and d.get("png"):
                     st.session_state.png = d["png"]
+                    if st.session_state.before_png is None:   # first failing render
+                        st.session_state.before_png = d["png"]
+
+                if event.kind == "done" and d.get("fixed_png"):
+                    st.session_state.fixed_png = d["fixed_png"]
 
                 if event.kind == "sim":
                     if "passed" in d:

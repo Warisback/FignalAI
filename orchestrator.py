@@ -134,10 +134,20 @@ async def debug(
                     elapsed_ms=round((time.monotonic()-t0)*1000))
 
         if sim["passed"]:
+            # the passing re-sim already wrote a fresh VCD — render it so the UI
+            # can show the FIXED waveform (proof of the fix), not just RESULT: PASS
+            fixed_png = None
+            if sim["vcd"]:
+                fixed_png = render_waveform(
+                    sim["vcd"], signals,
+                    out_path=os.path.join(work_dir, "waveform_fixed.png"),
+                    title=f"Round {rnd+1} — after patch (PASS)",
+                )
             yield Event("done",
                         fixed=True,
                         round=rnd+1,
                         total_ms=round((time.monotonic()-total_start)*1000),
+                        fixed_png=fixed_png,
                         **_speed())
             return
 
