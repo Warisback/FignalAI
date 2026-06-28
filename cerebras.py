@@ -66,6 +66,11 @@ baseline_client = AsyncOpenAI(
 MODEL          = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
 BASELINE_MODEL = os.environ.get("BASELINE_MODEL", "gpt-4o-mini")
 
+# The baseline (GPU host) is "enabled" only when a real key is configured.
+_bk = os.environ.get("BASELINE_API_KEY", "")
+BASELINE_ENABLED = bool(_bk) and not _bk.startswith(("your_", "sk-placeholder"))
+_baseline_rate = None   # cached MEASURED generation rate (tok/s) of the GPU host
+
 # Default reasoning_effort. gpt-oss-120b accepts only low|medium|high;
 # gemma-4-31b also accepts "none". Override with CEREBRAS_EFFORT in .env.
 DEFAULT_EFFORT = os.environ.get("CEREBRAS_EFFORT", "low")
@@ -110,6 +115,37 @@ async def call(
     async with _sem:
         await _pace()
         return await c.chat.completions.create(**kwargs)
+
+
+async def measure_baseline(messages: list, max_tokens: int = 200, force: bool = False):
+    """Fire ONE call on the baseline (GPU) host and MEASURE its generation rate.
+
+    Returns {tps, tokens, ms} (tps = completion_tokens / wall-clock) or None on
+    failure / when no baseline key is set. The rate is cached after the first
+    measurement (the GPU host's speed is stable, and the free tier is rate-
+    limited) — pass force=True to re-measure.
+    """
+    global _baseline_rate
+    if not BASELINE_ENABLED:
+        return None
+    if _baseline_rate is not None and not force:
+        return {"tps": round(_baseline_rate, 1), "tokens": None, "ms": None, "cached": True}
+
+    t0 = time.monotonic()
+    try:
+        r = await baseline_client.chat.completions.create(
+            model=BASELINE_MODEL, messages=messages,
+            temperature=0.0, max_tokens=max_tokens,
+        )
+    except Exception:
+        return None
+    wall  = time.monotonic() - t0
+    usage = getattr(r, "usage", None)
+    ct    = getattr(usage, "completion_tokens", None) if usage else None
+    if not ct or wall <= 0:
+        return None
+    _baseline_rate = ct / wall
+    return {"tps": round(_baseline_rate, 1), "tokens": ct, "ms": round(wall * 1000), "cached": False}
 
 
 def image_msg(png_path: str, prompt: str) -> list:

@@ -21,7 +21,7 @@ import os
 import time
 from typing import AsyncIterator
 
-from cerebras import call, parse_json, timing_summary
+from cerebras import call, parse_json, timing_summary, measure_baseline, BASELINE_ENABLED
 from tools    import read_rtl, run_sim, apply_patch, apply_patches, restore_backup
 from render   import render_waveform, describe_waveform
 from checks   import line_check, patch_check, majority_vote
@@ -42,10 +42,11 @@ ENABLE_VERIFIER = os.environ.get("ENABLE_VERIFIER", "false").lower() in ("1", "t
 # reliable middle ground for structured output.
 CODE_TEMPERATURE = float(os.environ.get("CODE_TEMPERATURE", "0.5"))
 
-# Assumed GPU throughput (tokens/sec) for the PROJECTED side-by-side baseline.
-# We compare actual Cerebras inference time against what the same token workload
-# would take on a GPU at this rate. ~50-80 tok/s is realistic for a ~100B model.
-BASELINE_TPS = float(os.environ.get("BASELINE_TPS", "60"))
+# GPU baseline. If a baseline host is configured (BASELINE_MODE=measured + key),
+# we MEASURE its real generation rate and use that. Otherwise we project from
+# BASELINE_TPS (assumed GPU tok/s) and label the card "est".
+BASELINE_TPS      = float(os.environ.get("BASELINE_TPS", "60"))
+BASELINE_MEASURED = BASELINE_ENABLED and os.environ.get("BASELINE_MODE", "measured").lower() == "measured"
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +91,7 @@ async def debug(
     gen_ms       = 0.0    # summed GENERATION time only (completion_time), across
                           # all agent calls — the basis for the gen-vs-gen compare
     out_tokens   = 0      # summed completion (output) tokens generated
+    baseline_tps = None   # MEASURED GPU generation rate (tok/s), if available
 
     def _agg(resp):
         """Accumulate this call's generation time + output tokens; return its timing."""
@@ -104,16 +106,19 @@ async def debug(
 
         cerebras_gen_ms : measured time Cerebras spent GENERATING the run's output
                           tokens (sum of per-call completion_time).
-        baseline_gen_ms : ESTIMATE — time to generate the SAME output tokens on a
-                          GPU at BASELINE_TPS tok/s. Derived, not measured.
+        baseline_gen_ms : time to generate the SAME output tokens on the GPU host —
+                          MEASURED (baseline_tps from a real call) when a baseline
+                          is configured, else projected from BASELINE_TPS (est).
         Neither includes queue/prompt/sim/render — that's the Total-cycle metric.
         """
-        tps = round(out_tokens / (gen_ms / 1000)) if gen_ms else None
+        tps  = round(out_tokens / (gen_ms / 1000)) if gen_ms else None
+        rate = baseline_tps if baseline_tps else BASELINE_TPS
         return dict(
             cerebras_gen_ms=round(gen_ms),
             out_tokens=out_tokens,
             tps=tps,
-            baseline_gen_ms=round(out_tokens / BASELINE_TPS * 1000) if out_tokens else None,
+            baseline_gen_ms=round(out_tokens / rate * 1000) if out_tokens else None,
+            baseline_measured=baseline_tps is not None,
         )
 
     for rnd in range(max_rounds):
@@ -191,14 +196,17 @@ async def debug(
 
         yield Event("code", status="running", k=K)
         t0    = time.monotonic()
+        code_msgs = agents.code_messages(rtl_lines, anomaly)
         tasks = [
-            call(
-                agents.code_messages(rtl_lines, anomaly),
-                schema=agents.CODE_SCHEMA,
-                temperature=CODE_TEMPERATURE,   # diversity for the majority vote
-            )
+            call(code_msgs, schema=agents.CODE_SCHEMA,
+                 temperature=CODE_TEMPERATURE)   # diversity for the majority vote
             for _ in range(K)
         ]
+        # Concurrently MEASURE the GPU baseline on the SAME prompt (once per run),
+        # overlapped with the Cerebras fan-out so it adds little wall time. Cached
+        # after the first run.
+        base_task = (asyncio.create_task(measure_baseline(code_msgs))
+                     if (BASELINE_MEASURED and rnd == 0) else None)
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
         hypotheses = []
@@ -231,6 +239,17 @@ async def debug(
                     kept=len(hypotheses),
                     elapsed_ms=round((time.monotonic()-t0)*1000),
                     **_speed())
+
+        # collect the measured GPU baseline (overlapped above) — advisory if slow
+        if base_task is not None:
+            try:
+                bm = await asyncio.wait_for(base_task, timeout=30)
+                if bm and bm.get("tps"):
+                    baseline_tps = bm["tps"]
+                    yield Event("baseline", tps=bm["tps"], tokens=bm.get("tokens"),
+                                ms=bm.get("ms"), cached=bm.get("cached", False))
+            except Exception:
+                pass   # baseline slow/unavailable -> _speed falls back to est
 
         if not hypotheses:
             yield Event("error",

@@ -147,6 +147,7 @@ if "cerebras_ms" not in st.session_state: st.session_state.cerebras_ms = None
 if "baseline_ms" not in st.session_state: st.session_state.baseline_ms = None
 if "tps"        not in st.session_state: st.session_state.tps       = None
 if "total_cycle_ms" not in st.session_state: st.session_state.total_cycle_ms = None
+if "baseline_measured" not in st.session_state: st.session_state.baseline_measured = False
 if "png"        not in st.session_state: st.session_state.png       = None
 if "sim_result" not in st.session_state: st.session_state.sim_result = None
 if "diff"       not in st.session_state: st.session_state.diff      = None
@@ -240,10 +241,11 @@ def render_stats():
         pend = (False, False, False, False)
 
     note = '<span class="sc-note">incl. sim + render</span>'
+    gpu_label = "GPU baseline · measured" if st.session_state.get("baseline_measured") else "GPU baseline · est"
     stats_ph.markdown(
         '<div class="statbar">'
         + _stat("Cerebras · gen", cere, "c-green", faster, pending=pend[0])
-        + _stat("GPU baseline · est", gpu, "c-red", pending=pend[1])
+        + _stat(gpu_label, gpu, "c-red", pending=pend[1])
         + _stat("Throughput", tps, "c-cyan", pending=pend[2])
         + _stat("Total cycle", cyc, "c-cyc", note, pending=pend[3])
         + '</div>',
@@ -396,6 +398,14 @@ def _render_event(ev: Event):
                     f'<code>{item.get("quoted_code","")[:40]}</code> · {tag}</div>',
                     unsafe_allow_html=True,
                 )
+
+    elif k == "baseline":
+        cached = " (cached)" if d.get("cached") else ""
+        st.markdown(
+            f'<div class="agent-row">🐢 <b>GPU baseline</b> · measured '
+            f'<code>{d.get("tps","?")} t/s</code> on the same model{cached}</div>',
+            unsafe_allow_html=True,
+        )
 
     elif k == "vote":
         w = d.get("winner") or d.get("fallback", {})
@@ -561,6 +571,8 @@ if run_clicked and selected and selected != "— no examples found —":
                     st.session_state.baseline_ms = d["baseline_gen_ms"]
                 if d.get("tps") is not None:
                     st.session_state.tps = d["tps"]
+                if d.get("baseline_measured") is not None:
+                    st.session_state.baseline_measured = d["baseline_measured"]
                 # total cycle = wall-clock (incl. sim + render) from the done event
                 if d.get("total_ms") is not None:
                     st.session_state.total_cycle_ms = d["total_ms"]
