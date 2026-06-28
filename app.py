@@ -192,6 +192,30 @@ with proj_col:
 with run_col:
     run_clicked = st.button("▶ Run debug", type="primary", use_container_width=True)
 
+# Wipe ALL previous-run state up front — BEFORE anything renders this script run —
+# whenever a new run starts OR the project is switched, so the old agent log,
+# waveforms, diff, console and timers never linger. The new run then fills the
+# cleared panels stage by stage.
+_switched = st.session_state.get("last_selected") != selected
+st.session_state.last_selected = selected
+_new_run  = bool(run_clicked and selected and selected != "— no examples found —")
+if _new_run or _switched:
+    st.session_state.events            = []
+    st.session_state.png               = None
+    st.session_state.before_png        = None
+    st.session_state.fixed_png         = None
+    st.session_state.sim_result        = None
+    st.session_state.diff              = None
+    st.session_state.console           = ""
+    st.session_state.cerebras_ms       = None
+    st.session_state.baseline_ms       = None
+    st.session_state.tps               = None
+    st.session_state.total_cycle_ms    = None
+    st.session_state.baseline_measured = False
+if _new_run:
+    st.session_state.running = True
+
+
 def _stat(label, val_html, color_cls, delta="", pending=False):
     pend = " pending" if pending else ""
     return (f'<div class="stat-card"><span class="sc-label">{label}</span>'
@@ -354,7 +378,8 @@ def render_stream_panel():
         st.write("")
 
         if not st.session_state.events:
-            st.caption("Press ▶ Run debug to start.")
+            st.caption("Starting…" if st.session_state.get("running")
+                       else "Press ▶ Run debug to start.")
             return
 
         # completed steps (each ends with a ✅ / ❌ / pill)
@@ -526,19 +551,7 @@ if run_clicked and selected and selected != "— no examples found —":
     shutil.copy2(src_dir / "design.v", rtl_path)
     shutil.copy2(src_dir / "tb.v",     tb_path)
     sigs     = SIGNALS.get(selected, ["clk"])
-
-    # clear previous run state (incl. stats, so the cards flip to "•••" live)
-    st.session_state.events      = []
-    st.session_state.png         = None
-    st.session_state.before_png  = None
-    st.session_state.fixed_png   = None
-    st.session_state.sim_result  = None
-    st.session_state.diff        = None
-    st.session_state.console     = ""
-    st.session_state.cerebras_ms = None
-    st.session_state.baseline_ms = None
-    st.session_state.tps         = None
-    st.session_state.total_cycle_ms = None
+    # (per-run state was already reset up front, before the initial render)
 
     async def run():
         st.session_state.running   = True
