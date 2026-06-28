@@ -411,11 +411,14 @@ def _render_event(ev: Event):
     elif k == "verifier":
         if d.get("status") == "done":
             v = d.get("verdict", {})
-            icon = "✅" if v.get("verdict") == "accept" else "❌"
+            accept = v.get("verdict") == "accept"
+            # advisory only — the simulator is the oracle, so a reject is a ⚠ note
+            icon = "✅" if accept else "⚠️"
+            tail = "" if accept else " (advisory — simulator decides)"
             st.markdown(
                 f'<div class="agent-row">{icon} <b>Verifier</b> · '
                 f'{v.get("verdict","?")} · {v.get("confidence","?")}% confidence · '
-                f'{d.get("elapsed_ms","–")}ms</div>',
+                f'{d.get("elapsed_ms","–")}ms{tail}</div>',
                 unsafe_allow_html=True,
             )
 

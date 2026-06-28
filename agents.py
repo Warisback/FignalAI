@@ -104,6 +104,33 @@ def vision_text_messages(description: str) -> list:
     ]
 
 
+def vision_hybrid_messages(png_path: str, description: str) -> list:
+    """Multimodal Vision agent: the waveform IMAGE plus the exact per-cycle table.
+
+    The image satisfies the multimodal use-case; the table keeps the anomaly
+    precise (the model reads numbers instead of guessing from pixels). Best of
+    both — used when multimodal is enabled on the model/org.
+    """
+    import base64
+    with open(png_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    prompt = (
+        "This is a digital timing waveform from an RTL simulation. The IMAGE shows "
+        "the waveform; the table below gives the exact per-clock-cycle values for "
+        "the same signals.\n\n"
+        f"{description}\n\n"
+        "Identify the single most obvious anomaly in the DATA signals. "
+        "Respond ONLY with the JSON schema — no preamble."
+    )
+    return [
+        {"role": "system", "content": VISION_TEXT_SYSTEM},
+        {"role": "user", "content": [
+            {"type": "text",      "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+        ]},
+    ]
+
+
 # ===========================================================================
 # AGENT 2 — CODE (called K times in parallel)
 # ===========================================================================

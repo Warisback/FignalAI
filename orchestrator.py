@@ -27,9 +27,9 @@ from render   import render_waveform, describe_waveform
 from checks   import line_check, patch_check, majority_vote
 import agents
 
-# "text"  — feed the Vision agent a signal-transition table (works on any model)
-# "image" — feed it the PNG (requires multimodal enabled for the org/model)
-# Flip to "image" via VISION_MODE=image once Cerebras enables multimodal.
+# "text"   — signal-transition table only (works on any model)
+# "image"  — the waveform PNG only (requires multimodal)
+# "hybrid" — PNG + the exact per-cycle table (multimodal AND precise) [recommended]
 VISION_MODE = os.environ.get("VISION_MODE", "text")
 
 # Pipeline shape, tuned to fit the free tier's 5 requests/min:
@@ -162,6 +162,10 @@ async def debug(
         t0 = time.monotonic()
         if VISION_MODE == "image":
             vision_msgs = agents.vision_messages(png)
+        elif VISION_MODE == "hybrid":
+            vision_msgs = agents.vision_hybrid_messages(
+                png, describe_waveform(sim["vcd"], signals)
+            )
         else:
             vision_msgs = agents.vision_text_messages(
                 describe_waveform(sim["vcd"], signals)
@@ -269,11 +273,11 @@ async def debug(
                         elapsed_ms=round((time.monotonic()-t0)*1000),
                         **_speed())
 
-            if verdict["verdict"] == "reject" and verdict["confidence"] > 70:
-                yield Event("error",
-                            message=f"Verifier rejected the hypothesis with high confidence: "
-                                    f"{verdict['reason']}")
-                return
+            # The verifier is ADVISORY — it surfaces doubt but never hard-aborts.
+            # The simulator re-run (step 8) is the ground-truth oracle: if the
+            # patch makes the testbench PASS, the hypothesis was right regardless
+            # of what the verifier (anchored to the vision agent's prose) thought.
+            # We still try the patch; if it doesn't pass, the loop re-diagnoses.
 
         # ------------------------------------------------------------------
         # STEP 7 — Patch agent
