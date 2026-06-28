@@ -37,9 +37,10 @@ VISION_MODE = os.environ.get("VISION_MODE", "text")
 # Bump CODE_K and enable the verifier when your 100-RPM tier lands.
 CODE_K          = int(os.environ.get("CODE_K", "3"))
 ENABLE_VERIFIER = os.environ.get("ENABLE_VERIFIER", "false").lower() in ("1", "true", "yes")
-# Some non-zero temperature gives the K samples diversity for the majority vote,
-# but too high makes gpt-oss-120b ramble and return empty content. 0.5 is a
-# reliable middle ground for structured output.
+# Temperature for the code fan-out — drives diversity for the majority vote.
+# gemma is robust at t=1 (per Cerebras/Google guidance): high t gives genuinely
+# independent hypotheses (real self-consistency) with no quality loss. gpt-oss
+# prefers ~0.5 (higher t tends to return empty content). Set via CODE_TEMPERATURE.
 CODE_TEMPERATURE = float(os.environ.get("CODE_TEMPERATURE", "0.5"))
 
 # GPU baseline. If a baseline host is configured (BASELINE_MODE=measured + key),
