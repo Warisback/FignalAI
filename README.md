@@ -89,21 +89,50 @@ Requires `iverilog` to be on PATH for the simulation tests.
 ## Project structure
 
 ```
-scopepilot/
-├── app.py             Streamlit dashboard
+fignalai/
+├── app.py             Streamlit dashboard (live timeline + honest speed cards)
 ├── orchestrator.py    Closed-loop controller
 ├── agents.py          Prompts + JSON schemas (Vision, Code, Verifier, Patch)
-├── cerebras.py        Cerebras API wrapper
-├── tools.py           read_rtl · run_sim · apply_patch
-├── render.py          VCD → PNG renderer (no GTKWave needed)
+├── cerebras.py        Cerebras API wrapper (rate limiter + timing)
+├── tools.py           read_rtl · run_sim · apply_patch · apply_patches
+├── render.py          VCD → PNG renderer + text description (no GTKWave)
 ├── checks.py          Deterministic hallucination guards
+├── coverage.py        Toggle coverage + hole detection from a VCD
+├── hunt.py            Coverage-driven hunt loop (flagship)
+├── mutate.py          Deterministic bug-injector (proves generality)
 ├── requirements.txt
 ├── .env.example
 └── examples/
-    ├── counter/       Off-by-one mod-10 counter
-    ├── fsm/           FSM missing reset
-    └── shiftreg/      Blocking vs non-blocking shift register
+    ├── counter/       Off-by-one mod-10 counter (1-line fix)
+    ├── fsm/           Wrong state transition — never reaches DONE (1-line fix)
+    ├── shiftreg/      Blocking '=' instead of '<=' (3-line, multi-edit fix)
+    └── alu/           SUB opcode computes a+b (combinational, 1-line fix)
 ```
+
+---
+
+## Advanced capabilities (v2)
+
+Built on top of the core loop — see `git tag v1.0-stable` for the minimal baseline.
+
+- **Multi-edit patches** (`tools.apply_patches`): one patch can change several
+  lines atomically (validate-all-then-apply), so a multi-line bug like
+  blocking→non-blocking fixes in a single round.
+- **Coverage-driven bug hunting** (`hunt.py` + `coverage.py`): simulate → measure
+  toggle coverage → find holes (stuck bits / unreached states) → regenerate
+  stimulus aimed at the holes → repeat to a threshold. A hole that *no* stimulus
+  can close is a real bug → handed to the diagnose/patch loop. The stimulus
+  generator is a plug-in callback; a deterministic one ships for tests, and the
+  agent becomes it once on the full tier.
+- **Bug injector** (`mutate.py`): deterministic mutation operators turn known-good
+  RTL into a fresh bug — feed it a mutated module and watch the loop fix a bug it
+  has never seen, proving it generalises rather than memorises.
+
+**Status:** the deterministic core of all of the above is implemented and tested
+(`pytest` — 34 tests, iverilog-backed). The agent-facing layers (wiring the model
+into the coverage hunt, the adversarial-verifier debate, and prompt tuning) are
+finalised on the full Cerebras tier + gemma-4-31b, where the 5-way fan-out and
+many-call loops actually run in parallel.
 
 ---
 
