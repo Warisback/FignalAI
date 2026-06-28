@@ -22,7 +22,7 @@ import time
 from typing import AsyncIterator
 
 from cerebras import call, parse_json, timing_summary
-from tools    import read_rtl, run_sim, apply_patch, restore_backup
+from tools    import read_rtl, run_sim, apply_patch, apply_patches, restore_backup
 from render   import render_waveform, describe_waveform
 from checks   import line_check, patch_check, majority_vote
 import agents
@@ -289,17 +289,24 @@ async def debug(
         p_time = _agg(p_resp)
         timing_log.append(("patch", p_time))
 
-        # Guard before writing: check 'before' text is actually on the line
-        if not patch_check(rtl_lines, patch["line_no"], patch["before"]):
-            yield Event("error",
-                        message=f"Patch safety check failed: "
-                                f"'{patch['before']}' not found on line {patch['line_no']}.",
-                        patch=patch)
+        edits = patch.get("edits", [])
+
+        # Guard before writing: every edit's 'before' must be on its line
+        bad = next(
+            (e for e in edits if not patch_check(rtl_lines, e["line_no"], e["before"])),
+            None,
+        )
+        if not edits or bad is not None:
+            msg = ("Patch produced no edits."
+                   if not edits else
+                   f"Patch safety check failed: '{bad['before']}' not found on line {bad['line_no']}.")
+            yield Event("error", message=msg, patch=patch)
             return
 
-        result = apply_patch(rtl_path, patch["line_no"], patch["before"], patch["after"])
+        result = apply_patches(rtl_path, edits)
         yield Event("patch", status="done",
                     patch=patch,
+                    edits=edits,
                     result=result,
                     timing=p_time,
                     elapsed_ms=round((time.monotonic()-t0)*1000),

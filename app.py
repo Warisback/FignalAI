@@ -420,10 +420,15 @@ def _render_event(ev: Event):
 
     elif k == "patch":
         if d.get("status") == "done":
-            p = d.get("patch", {})
+            edits = d.get("edits") or d.get("patch", {}).get("edits", [])
+            shown = " · ".join(
+                f'line {e.get("line_no","?")} <code>{e.get("before","")}</code>→<code>{e.get("after","")}</code>'
+                for e in edits[:3]
+            ) or "—"
+            extra = f' (+{len(edits)-3} more)' if len(edits) > 3 else ''
+            plural = "es" if len(edits) != 1 else ""
             st.markdown(
-                f'<div class="agent-row">✏️ <b>Patch</b> · line {p.get("line_no","?")} · '
-                f'<code>{p.get("before","")}</code> → <code>{p.get("after","")}</code></div>',
+                f'<div class="agent-row">✏️ <b>Patch</b> · {len(edits)} edit{plural} · {shown}{extra}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -536,12 +541,14 @@ if run_clicked and selected and selected != "— no examples found —":
 
                 if event.kind == "patch" and d.get("status") == "done":
                     p = d.get("patch", {})
-                    if p:
-                        st.session_state.diff = (
-                            f"-   {p.get('before','')}\n"
-                            f"+   {p.get('after','')}\n"
-                            f"#   line {p.get('line_no','?')}: {p.get('rationale','')}"
-                        )
+                    edits = d.get("edits") or p.get("edits") or []
+                    if edits:
+                        out = []
+                        for e in edits:
+                            out.append(f"- line {e.get('line_no','?')}   {e.get('before','')}")
+                            out.append(f"+ line {e.get('line_no','?')}   {e.get('after','')}")
+                        out.append(f"# {p.get('rationale','')}")
+                        st.session_state.diff = "\n".join(out)
 
                 # live generation-vs-generation snapshot (on each sub-step done)
                 if d.get("cerebras_gen_ms") is not None:

@@ -240,37 +240,41 @@ def verifier_messages(hypothesis: dict, anomaly: dict, rtl_lines: list[str]) -> 
 # ===========================================================================
 
 PATCH_SYSTEM = """You are an RTL bug-fix engineer.
-You are given a verified hypothesis about which line of code contains a bug.
-Your job is to produce the minimal, correct fix for that line.
+You are given a verified hypothesis about the bug and the full RTL source.
+Produce the minimal SET of line edits that together fix the bug.
 
 Rules:
-- Change as little as possible — one value, one operator, one keyword.
-- The 'before' field must be the exact substring to replace (not the whole line).
-- The 'after' field is the replacement for that substring.
-- Explain the rationale briefly.
+- Prefer the smallest change. Most bugs need ONE edit; some need a few — e.g. a
+  blocking '=' that must become non-blocking '<=' across several lines.
+- Each edit's 'before' must be an exact substring that appears on its line_no
+  (copy it verbatim, not a paraphrase).
+- 'after' is the replacement for that substring.
+- Include every edit required for the fixed module to pass its testbench.
 """
 
 PATCH_SCHEMA = {
     "type": "object",
     "properties": {
-        "line_no": {
-            "type": "integer",
-            "description": "1-indexed line number to edit",
-        },
-        "before": {
-            "type": "string",
-            "description": "Exact substring on that line to replace",
-        },
-        "after": {
-            "type": "string",
-            "description": "Replacement substring",
+        "edits": {
+            "type": "array",
+            "description": "One or more line edits that together fix the bug",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "line_no": {"type": "integer", "description": "1-indexed line to edit"},
+                    "before":  {"type": "string",  "description": "Exact substring on that line to replace"},
+                    "after":   {"type": "string",  "description": "Replacement substring"},
+                },
+                "required": ["line_no", "before", "after"],
+                "additionalProperties": False,
+            },
         },
         "rationale": {
             "type": "string",
-            "description": "One sentence: why this change fixes the bug",
+            "description": "One sentence: why these changes fix the bug",
         },
     },
-    "required": ["line_no", "before", "after", "rationale"],
+    "required": ["edits", "rationale"],
     "additionalProperties": False,
 }
 
@@ -287,7 +291,8 @@ def patch_messages(hypothesis: dict, rtl_lines: list[str]) -> list:
         f"  Bug class: {hypothesis.get('bug_class', 'unknown')}\n"
         f"  Hypothesis: {hypothesis['hypothesis']}\n\n"
         f"RTL SOURCE:\n```verilog\n{rtl_text}\n```\n\n"
-        "Produce the minimal fix. Respond ONLY with the JSON schema."
+        "Produce the minimal set of edits that fixes the bug. "
+        "Respond ONLY with the JSON schema."
     )
     return [
         {"role": "system", "content": PATCH_SYSTEM},

@@ -148,6 +148,59 @@ def apply_patch(
 
 
 # ---------------------------------------------------------------------------
+# apply_patches  (multi-edit, atomic)
+# ---------------------------------------------------------------------------
+
+def apply_patches(rtl_path: str, edits: list) -> dict:
+    """
+    Apply a LIST of edits in one shot. Each edit is {line_no, before, after}.
+
+    Validates EVERY edit against the current source first; if any fails its
+    safety check, nothing is written (all-or-nothing). This lets a single patch
+    fix a multi-line bug — e.g. blocking '=' that must become non-blocking '<='
+    across three lines — in one round instead of three.
+
+    Returns:
+        success : bool
+        message : str
+        backup  : str          — .bak of the original file
+        applied : list[str]    — one human-readable line per applied edit
+    """
+    path  = pathlib.Path(rtl_path)
+    lines = path.read_text().splitlines()
+
+    backup = rtl_path + ".bak"
+    shutil.copy2(rtl_path, backup)
+
+    if not edits:
+        return {"success": False, "message": "no edits provided", "backup": backup, "applied": []}
+
+    # --- validate ALL edits before touching the file ---
+    for e in edits:
+        ln     = e.get("line_no")
+        before = (e.get("before") or "").strip()
+        if not isinstance(ln, int) or not (1 <= ln <= len(lines)):
+            return {"success": False, "applied": [], "backup": backup,
+                    "message": f"line_no {ln} out of range (file has {len(lines)} lines)"}
+        if before not in lines[ln - 1]:
+            return {"success": False, "applied": [], "backup": backup,
+                    "message": (f"Safety check failed: '{before}' not found on line {ln}.\n"
+                                f"Actual line: '{lines[ln - 1]}'")}
+
+    # --- apply all (each edit operates on its own line) ---
+    applied = []
+    for e in edits:
+        ln     = e["line_no"]
+        before = e["before"].strip()
+        after  = (e.get("after") or "").strip()
+        lines[ln - 1] = lines[ln - 1].replace(before, after)
+        applied.append(f"line {ln}: '{before}' → '{after}'")
+
+    path.write_text("\n".join(lines) + "\n")
+    return {"success": True, "message": "; ".join(applied), "backup": backup, "applied": applied}
+
+
+# ---------------------------------------------------------------------------
 # restore_backup
 # ---------------------------------------------------------------------------
 

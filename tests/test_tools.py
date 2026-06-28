@@ -1,7 +1,7 @@
 """tests/test_tools.py — simulation + patching tools"""
 import pytest, pathlib, tempfile, sys
 sys.path.insert(0, "..")
-from tools import read_rtl, run_sim, apply_patch, restore_backup
+from tools import read_rtl, run_sim, apply_patch, apply_patches, restore_backup
 
 RTL_SRC = """`timescale 1ns/1ps
 module simple(input clk, output reg q);
@@ -76,3 +76,27 @@ def test_read_rtl(tmpdir):
     f.write_text("a\nb\nc\n")
     lines = read_rtl(str(f))
     assert lines == ["a", "b", "c"]
+
+def test_apply_patches_multi(tmpdir):
+    f = tmpdir / "d.v"
+    f.write_text("q1 = din;\nq2 = q1;\ndout = q2;\n")
+    r = apply_patches(str(f), [
+        {"line_no": 1, "before": "q1 = din",  "after": "q1 <= din"},
+        {"line_no": 2, "before": "q2 = q1",   "after": "q2 <= q1"},
+        {"line_no": 3, "before": "dout = q2", "after": "dout <= q2"},
+    ])
+    assert r["success"] is True
+    txt = f.read_text()
+    assert "q1 <= din" in txt and "q2 <= q1" in txt and "dout <= q2" in txt
+    assert len(r["applied"]) == 3
+
+def test_apply_patches_atomic_abort(tmpdir):
+    f = tmpdir / "d.v"
+    original = "a = 1;\nb = 2;\n"
+    f.write_text(original)
+    r = apply_patches(str(f), [
+        {"line_no": 1, "before": "a = 1", "after": "a = 9"},   # valid
+        {"line_no": 2, "before": "NOPE",  "after": "x"},        # not on line 2
+    ])
+    assert r["success"] is False
+    assert f.read_text() == original   # all-or-nothing: nothing written
