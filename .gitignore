@@ -1,0 +1,32 @@
+# secrets
+.env
+*.key
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# generated artifacts
+*.vcd
+*.vvp
+sim_out
+waveform*.png
+*.bak
+runs/
+examples/**/s
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# internal/planning docs — keep out of the public repo (keep the logo)
+assets/*.pdf
+assets/*build_bible*
+
+# third-party style reference (not ours to publish)
+assets/websitereference.png

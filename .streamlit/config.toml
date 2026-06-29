@@ -1,0 +1,10 @@
+# FignalAI theme — plain, neutral light "EDA tool" palette (Vivado-inspired).
+# Base colours here apply before any injected CSS, so the app stays on-palette
+# even where custom selectors don't reach.
+[theme]
+base = "light"
+backgroundColor = "#e9ebee"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1f242b"
+primaryColor = "#3f6ea3"
+font = "sans serif"

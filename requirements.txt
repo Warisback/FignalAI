@@ -1,0 +1,6 @@
+openai>=1.30.0
+python-dotenv>=1.0.0
+streamlit>=1.35.0
+matplotlib>=3.8.0
+vcdvcd>=2.0.0
+pytest>=8.0.0
