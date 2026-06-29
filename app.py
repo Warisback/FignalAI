@@ -635,7 +635,17 @@ if run_clicked and selected and selected != "— no examples found —":
         render_stats()
         render_stream_panel()
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except Exception as e:
+        # a transient API/network error (Cerebras 429/connection) must NOT dump a
+        # raw traceback into the UI — show a clean, retryable message instead
+        st.session_state.running = False
+        st.session_state.events.append(
+            Event("error", message=f"Run interrupted — {type(e).__name__}: {e}. "
+                                   "Cerebras may be busy; press Run debug to retry.")
+        )
+        render_stream_panel()
 
     # cerebras_ms / baseline_ms / tps are set from the done event (honest
     # inference time, not wall-clock which includes free-tier rate-limit waits)

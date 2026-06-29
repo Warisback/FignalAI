@@ -289,19 +289,27 @@ async def debug(
         if ENABLE_VERIFIER:
             yield Event("verifier", status="running")
             t0 = time.monotonic()
-            v2_resp  = await call(
-                agents.verifier_messages(winner, anomaly, rtl_lines),
-                schema=agents.VERIFIER_SCHEMA,
-                temperature=0.0,
-            )
-            verdict = parse_json(v2_resp)
-            v2_time = _agg(v2_resp)
-            timing_log.append(("verifier", v2_time))
-            yield Event("verifier", status="done",
-                        verdict=verdict,
-                        timing=v2_time,
-                        elapsed_ms=round((time.monotonic()-t0)*1000),
-                        **_speed())
+            try:
+                v2_resp = await call(
+                    agents.verifier_messages(winner, anomaly, rtl_lines),
+                    schema=agents.VERIFIER_SCHEMA,
+                    temperature=0.0,
+                )
+                verdict = parse_json(v2_resp)
+                v2_time = _agg(v2_resp)
+                timing_log.append(("verifier", v2_time))
+                yield Event("verifier", status="done",
+                            verdict=verdict,
+                            timing=v2_time,
+                            elapsed_ms=round((time.monotonic()-t0)*1000),
+                            **_speed())
+            except Exception as e:
+                # verifier is advisory — a transient API error must NOT abort the
+                # run; skip it and let the simulator decide.
+                yield Event("verifier", status="done",
+                            verdict={"verdict": "skipped", "confidence": 0,
+                                     "reason": f"verifier unavailable ({type(e).__name__}) — skipped"},
+                            elapsed_ms=round((time.monotonic()-t0)*1000))
 
             # The verifier is ADVISORY — it surfaces doubt but never hard-aborts.
             # The simulator re-run (step 8) is the ground-truth oracle: if the
