@@ -8,7 +8,8 @@ Key design decisions:
 - Renders itself (no GTKWave / display server needed)
 - Prints decimal values as text on bus signals so the vision model
   can read numbers instead of counting bit transitions
-- Dark background + cyan traces = high contrast for the vision model
+- Light background + dark slate traces = clean datasheet look, high contrast
+  for the vision model and consistent with the (light) dashboard theme
 - Downscales to ~768px wide to keep image token cost low
 """
 
@@ -113,10 +114,10 @@ def render_waveform(
     if n == 1:
         axes = [axes]
 
-    fig.patch.set_facecolor("#0C0C0E")
+    fig.patch.set_facecolor("#ffffff")
 
     if title:
-        fig.suptitle(title, color="#A6A9AE", fontsize=9,
+        fig.suptitle(title, color="#5b626d", fontsize=9,
                      fontfamily="monospace", y=0.98)
 
     # find max time for x-axis
@@ -129,14 +130,14 @@ def render_waveform(
         max_t = 200
 
     for ax, sig in zip(axes, signals):
-        ax.set_facecolor("#0C0C0E")
-        ax.tick_params(colors="#6C7077", labelsize=7)
+        ax.set_facecolor("#ffffff")
+        ax.tick_params(colors="#8a919c", labelsize=7)
         for spine in ax.spines.values():
-            spine.set_edgecolor("#1C1C20")
+            spine.set_edgecolor("#cdd2d9")
 
         tv = tv_map.get(sig, [])
         if not tv:
-            ax.set_ylabel(sig, color="#6C7077", fontsize=8,
+            ax.set_ylabel(sig, color="#8a919c", fontsize=8,
                           fontfamily="monospace", rotation=0,
                           ha="right", va="center", labelpad=4)
             continue
@@ -159,19 +160,19 @@ def render_waveform(
                 try:
                     val_int = int(raw[k], 2)
                     label   = str(val_int)
-                    color   = "#5CCAE0"
+                    color   = "#3f6ea3"
                     # amber highlight for the anomalous value
                     if sig == highlight_anomaly and val_int > 9:
-                        color = "#E0B45C"
+                        color = "#b9802f"
                 except ValueError:
                     label = raw[k]
-                    color = "#6C7077"
+                    color = "#8a919c"
 
                 mid = 0.5
                 slant = min(w * 0.08, 4)
                 xs = [t0 + slant, t1 - slant, t1, t0]
                 ys = [1.0,        1.0,         0.0, 0.0]
-                ax.fill(xs, ys, color=color, alpha=0.15)
+                ax.fill(xs, ys, color=color, alpha=0.10)
                 ax.plot([t0 + slant, t1 - slant], [1.0, 1.0], color=color, lw=1.4)
                 ax.plot([t0 + slant, t1 - slant], [0.0, 0.0], color=color, lw=1.4)
                 ax.plot([t0, t0 + slant], [0.0, 1.0], color=color, lw=1.0)
@@ -182,7 +183,7 @@ def render_waveform(
                     ax.text(
                         (t0 + t1) / 2, 0.52, label,
                         ha="center", va="center",
-                        color=color if color != "#5CCAE0" else "#F2F3F5",
+                        color=color if color != "#3f6ea3" else "#1f242b",
                         fontsize=8, fontfamily="monospace", fontweight="bold",
                     )
 
@@ -199,23 +200,23 @@ def render_waveform(
 
             # extend the last value out to max_t so x and y match in length
             ax.step(times, vals_num + [vals_num[-1]], where="post",
-                    color="#5CCAE0", linewidth=1.6)
+                    color="#3f6ea3", linewidth=1.6)
             ax.set_ylim(-0.2, 1.3)
 
-        ax.set_ylabel(sig, color="#A6A9AE", fontsize=8,
+        ax.set_ylabel(sig, color="#5b626d", fontsize=8,
                       fontfamily="monospace", rotation=0,
                       ha="right", va="center", labelpad=6)
         ax.set_xlim(0, max_t)
-        ax.grid(True, color="#1C1C20", linewidth=0.5, linestyle="--", alpha=0.6)
+        ax.grid(True, color="#e6e9ed", linewidth=0.5, linestyle="--", alpha=0.9)
         ax.set_yticks([])
 
-    axes[-1].tick_params(axis="x", colors="#6C7077", labelsize=7)
-    axes[-1].set_xlabel("time (ns)", color="#6C7077", fontsize=7,
+    axes[-1].tick_params(axis="x", colors="#8a919c", labelsize=7)
+    axes[-1].set_xlabel("time (ns)", color="#8a919c", fontsize=7,
                         fontfamily="monospace")
 
     plt.tight_layout(rect=[0.08, 0, 1, 0.97])
     plt.savefig(out_path, dpi=110, bbox_inches="tight",
-                facecolor="#0C0C0E", edgecolor="none")
+                facecolor="#ffffff", edgecolor="none")
     plt.close()
     return out_path
 
